@@ -6,10 +6,15 @@
 #include <gtk/gtk.h> //GUI
 #include <unistd.h> //Para read/write
 #include <fcntl.h> //Para open
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include "common.h"
 
-//Tuberías con nombre
-int fd_query, fd_response;
+int sockfd; //Descriptor del socket
+struct sockaddr_in serverStruct; //Struct para connect
+socklen_t addrlen; //Tamaño del Struct
 
 typedef struct {
     GtkWidget *window;
@@ -179,23 +184,26 @@ static void search_cb(GtkButton *btn, gpointer user_data){
         q_name.type = 0;
         strcpy(q_name.criteria, name);
         
-        r = write(fd_query, &q_name, sizeof(q_name));
+        //Se comporta igual que un write
+        r = send(sockfd, &q_name, sizeof(q_name), 0);
         if(r < 0){
-            perror("Error escribiendo en fifo_query");
+            perror("Error en send (Cliente).");
             exit(-1);
         }
+        
 
     } else if(strlen(publ) > 0){
         q_publ.type = 1;
         strcpy(q_publ.criteria, publ);
         
-        r = write(fd_query, &q_publ, sizeof(q_publ));
+        r = send(sockfd, &q_publ, sizeof(q_publ), 0);
         if(r < 0){
-            perror("Error escribiendo en fifo_query");
+            perror("Error en send (Cliente).");
             exit(-1);
         }
+
     }
-    readFull(fd_response, &count, sizeof(int));
+    recvFull(sockfd, &count, sizeof(int));
  
     if(count == 0){
         showError(GTK_WINDOW(widgets -> window), "No se encontraron resultados");
@@ -204,7 +212,7 @@ static void search_cb(GtkButton *btn, gpointer user_data){
         return;   
     } 
 
-    readFull(fd_response, results, count * sizeof(Videojuego));
+    recvFull(sockfd, results, count * sizeof(Videojuego));
 
     /*NOTA. El buffer de la tubería es de solo 65536 bytes,
     así que debemos recibir los resultados por partes
@@ -422,15 +430,27 @@ static void activate(GtkApplication *app){
 int main(int argc, char **argv){
     GtkApplication *app;
     int status;
+    int r;
 
-    fd_query = open("/tmp/fifo_query", O_WRONLY);
-    if(fd_query < 0){
-        perror("Error abriendo fifo_query");
+    //Creación de socket
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd == -1){
+        perror("Error en socket");
+        exit(-1);
     }
 
-    fd_response = open("/tmp/fifo_response", O_RDONLY);
-    if(fd_response < 0){
-        perror("Error abriendo fifo_response");
+    //Llenamos Struct
+    serverStruct.sin_family = AF_INET; //IPv4
+    serverStruct.sin_port = htons(PORT); //Puerto
+    serverStruct.sin_addr.s_addr = inet_addr("127.0.0.1"); //IP Local
+    bzero(&(serverStruct.sin_zero), 8);
+    addrlen = sizeof(serverStruct);
+
+    //Conectar con el servidor
+    r = connect(sockfd, (struct sockaddr *)&serverStruct, addrlen);
+    if (r == -1){
+        perror("Error en connect");
+        exit(-1);
     }
 
     app = gtk_application_new ("ui.gtk.practica1", G_APPLICATION_DEFAULT_FLAGS);

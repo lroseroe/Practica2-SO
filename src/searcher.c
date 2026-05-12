@@ -97,7 +97,7 @@ int main(){
             count = offsets.size;
 
         }
-        writeFull(fd_response, &count, sizeof(int));
+        sendFull(fd_response, &count, sizeof(int));
 
         printf("DEBUG searcher count = %d\n", count);
         fflush(stdout);
@@ -111,7 +111,7 @@ int main(){
         así que debemos enviar los resultados por partes
         */
         if(count > 0){
-            writeFull(fd_response, results, count * sizeof(Videojuego));
+            sendFull(fd_response, results, count * sizeof(Videojuego));
         }
 
     }

@@ -6,6 +6,9 @@
 #include <stdio.h>
 #include <stdbool.h>
 
+//Puerto que usarán el cliente (GUI) y el servidor (Searcher)
+#define PORT 3535
+
 /* Cantidad de buckets del hash.
    65536 = 2^16, buen balance entre memoria y colisiones */
 #define NUM_BUCKETS 65536UL
@@ -116,8 +119,8 @@ int dividirCampo(const char *campo, char arr[][MAX_STRING_LEN], int max, bool no
 
 Videojuego getRegisterFromCSV(uint32_t position, FILE *file);
 
-void writeFull(int fd, void *buf, size_t size);
+void sendFull(int fd, void *buf, size_t size);
 
-void readFull(int fd, void *buf, size_t size);
+void recvFull(int fd, void *buf, size_t size);
 
 #endif

@@ -6,6 +6,7 @@
 #include <unistd.h> //Para read/write
 #include <stdbool.h>
 #include <errno.h>
+#include <sys/socket.h>
 
 /* Hash djb2 para strings */
 unsigned long hashString(const char *str, unsigned long B){
@@ -231,14 +232,15 @@ Videojuego getRegisterFromCSV(uint32_t position, FILE *file){
     return vjuego;
 }
 
-void writeFull(int fd, void *buf, size_t size){
+void sendFull(int fd, void *buf, size_t size){
     size_t total = 0;
     ssize_t r;
 
     while(total < size){
-        r = write(fd, ((char*)buf) + total, size - total);
+        //Si mandamos menos del total, enviamos los bytes 1 a 1 hasta completarlo.
+        r = send(fd, ((char*)buf) + total, size - total, 0);
         if(r < 0){
-            perror("Error en write");
+            perror("Error en send");
             exit(-1);
         }
 
@@ -246,14 +248,15 @@ void writeFull(int fd, void *buf, size_t size){
     }
 }
 
-void readFull(int fd, void *buf, size_t size){
+void recvFull(int fd, void *buf, size_t size){
     size_t total = 0;
     ssize_t r;
 
     while(total < size){
-        r = read(fd, ((char*)buf) + total, size - total);
+        //Si recibimos menos del total leemos los bytes 1 a 1 hasta completarlo.
+        r = recv(fd, ((char*)buf) + total, size - total, 0);
         if(r < 0){
-            perror("Error en read");
+            perror("Error en recv");
             exit(-1);
         }
 
