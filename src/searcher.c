@@ -3,51 +3,61 @@
 #include <unistd.h>
 #include <errno.h>
 #include <unistd.h> //Para read/write
-#include <fcntl.h> //Para open
-#include <sys/types.h> //Para mkfifo
-#include <sys/stat.h> //Para mkfifo
+#include <sys/types.h> 
+#include <strings.h>
+#include <time.h> 
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include "common.h"
 #include "search_name.h"
 #include "search_publisher.h"
 
-int fd_query, fd_response;
+#define BACKLOG 8
 
 int main(){
-    int r, count;
+    int r, count, sockfd, sockfdc1;
+    struct sockaddr_in server, cliente;
+    socklen_t addrlen, addrlen_c;
+
     Query query;
     OffsetList offsets;
-    Videojuego *results;
-    results = malloc(sizeof(Videojuego) * MAX_RESULTS);
-    if(!results){
-        perror("Error alocando memoria");
-        exit(-1);
-    }
+    Videojuego temp;   // <-- un solo buffer temporal
+    struct timespec start, end;
+    double totalTime;
 
     //Inicializar offsets
     offsets.positions = NULL;
     offsets.size = 0;
 
-    r = mkfifo("/tmp/fifo_query", 0666); //Fifo para solicitar busqueda
-    if(r < 0 && errno != EEXIST){
-        perror("Error creando fifo_query");
-        exit(1);
-    }
-
-    r = mkfifo("/tmp/fifo_response", 0666); //Fifo para enviar resultados encontrados
-    if(r < 0 && errno != EEXIST){
-        perror("Error creando fifo_response");
-        exit(1);
-    }
-
-    fd_query = open("/tmp/fifo_query", O_RDONLY);
-    if(fd_query < 0){
-        perror("Error abriendo fifo_query");
+    // crear socket
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if(sockfd == -1){
+        perror("Error en socket");
         exit(-1);
     }
 
-    fd_response = open("/tmp/fifo_response", O_WRONLY);
-    if(fd_response < 0){
-        perror("Error abriendo fifo_response");
+    server.sin_family = AF_INET;    //ipv4
+    server.sin_port = htons(PORT);  //endianismo
+    server.sin_addr.s_addr = INADDR_ANY;
+    bzero(&(server.sin_zero), 8);
+    addrlen = sizeof(struct sockaddr);
+    //nombrar socket
+    r = bind(sockfd, (struct sockaddr *)&server, addrlen);
+    if(r == -1){
+        perror("Error en bind");
+        exit(-1);
+    }
+
+    r = listen(sockfd, BACKLOG);
+    if(r == -1){
+        perror("Error en listen");
+        exit(-1);
+    }
+    addrlen_c = sizeof(struct sockaddr_in);
+    sockfdc1 = accept(sockfd, (struct sockaddr *)&cliente, &addrlen_c);
+    if(sockfdc1 == -1){
+        perror("Error en accept");
         exit(-1);
     }
 
@@ -71,58 +81,62 @@ int main(){
     }
 
     while(1){
-        r = read(fd_query, &query, sizeof(query));
+        r = recvFull(sockfdc1, &query, sizeof(query));
 
         if(r == 0){ //GUI cerrada
             printf("Terminando proceso de búsqueda...\n");
             break;
         }
 
-        if(r < 0){
-            perror("Error leyendo fifo_query");
-            exit(-1);
-        }
-
+        clock_gettime(CLOCK_MONOTONIC, &start);
         normalizarCadena(query.criteria);
+        //si query=0, se busca por nombre
+        //si query=1, se busca por publisher
         if(query.type == 0){
             printf("Buscando nombre... %s\n", query.criteria);
-        
-            offsets = buscarEnIndiceName(query.criteria, dir_name, fidx_name);  
-            count = offsets.size;
-
+            offsets = buscarEnIndiceName(query.criteria, dir_name, fidx_name);
         } else if(query.type == 1){
             printf("Buscando distribuidora... %s\n", query.criteria);
-
-            offsets = buscarEnIndicePublisher(query.criteria, dir_publ, fidx_publ);  
-            count = offsets.size;
-
+            offsets = buscarEnIndicePublisher(query.criteria, dir_publ, fidx_publ);
+        } else {
+            offsets.positions = NULL;
+            offsets.size = 0;
         }
-        sendFull(fd_response, &count, sizeof(int));
+
+        count = offsets.size;
+        sendFull(sockfdc1, &count, sizeof(int));
+
+        //Enviamos los resultados encontrados uno por uno para evitar sobrecargar la memoria 
+        for(int i = 0; i < count; i++){
+            temp = getRegisterFromCSV(offsets.positions[i], fcsv);
+            sendFull(sockfdc1, &temp, sizeof(Videojuego));
+        }
+
+        clock_gettime(CLOCK_MONOTONIC, &end);
+
+        totalTime = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+        printf("Tiempo de búsqueda: %.6f segundos\n", totalTime);
+        printf("Resultados encontrados: %i\n", count);
+        fflush(stdout);
 
         printf("DEBUG searcher count = %d\n", count);
         fflush(stdout);
 
-        if(count > MAX_RESULTS) count = MAX_RESULTS;
-
-        for(int i = 0; i < count; i++){
-            results[i] = getRegisterFromCSV(offsets.positions[i], fcsv);
-        }
-        /*NOTA. El buffer de la tubería es de solo 65536 bytes,
-        así que debemos enviar los resultados por partes
-        */
-        if(count > 0){
-            sendFull(fd_response, results, count * sizeof(Videojuego));
+        if(offsets.positions){
+            free(offsets.positions);
+            offsets.positions = NULL;
+            offsets.size = 0;
         }
 
     }
 
-    if(offsets.positions) free(offsets.positions);
-    free(results);
     free(dir_name);
+    free(dir_publ);
     fclose(fidx_name);
+    fclose(fidx_publ);
     fclose(fcsv);
-    
-    //close(fd_query);
+    close(sockfdc1);
+    close(sockfd);
 
     return 0;
 }

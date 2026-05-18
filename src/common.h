@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <unistd.h>
 
 //Puerto que usarán el cliente (GUI) y el servidor (Searcher)
 #define PORT 3535
@@ -119,8 +120,8 @@ int dividirCampo(const char *campo, char arr[][MAX_STRING_LEN], int max, bool no
 
 Videojuego getRegisterFromCSV(uint32_t position, FILE *file);
 
-void sendFull(int fd, void *buf, size_t size);
+ssize_t sendFull(int fd, void *buf, size_t size);
 
-void recvFull(int fd, void *buf, size_t size);
+ssize_t recvFull(int fd, void *buf, size_t size);
 
 #endif

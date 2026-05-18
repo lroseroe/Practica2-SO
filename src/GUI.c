@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdbool.h>
-#include <string.h>
+#include <strings.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <gtk/gtk.h> //GUI
@@ -69,6 +69,7 @@ static void mostrarDetalles(GtkListBox *box, GtkListBoxRow *row, gpointer user_d
     if(!row) return;
     searchWidgets *widgets = user_data;
     char *text; //String auxiliar para mostrar info en pantalla
+    char *temp; //Para manejar stringArrayToString
     Videojuego *vjuego = g_object_get_data(G_OBJECT(row), "game-data");
     if(!vjuego) return;
 
@@ -105,24 +106,34 @@ static void mostrarDetalles(GtkListBox *box, GtkListBoxRow *row, gpointer user_d
     gtk_label_set_text(GTK_LABEL(widgets->reviews_count_lbl), text);
     g_free(text);
 
-    text = g_strdup_printf("Plataformas: %s", stringArrayToString(vjuego->platforms, MAX_CANT));
+    temp = stringArrayToString(vjuego->platforms, MAX_CANT);
+    text = g_strdup_printf("Plataformas: %s", temp);
     gtk_label_set_text(GTK_LABEL(widgets->platforms_lbl), text);
+    g_free(temp);
     g_free(text);
 
-    text = g_strdup_printf("Tiendas: %s", stringArrayToString(vjuego->stores, MAX_CANT));
+    temp = stringArrayToString(vjuego->stores, MAX_CANT);
+    text = g_strdup_printf("Tiendas: %s", temp);
     gtk_label_set_text(GTK_LABEL(widgets->stores_lbl), text);
+    g_free(temp);
     g_free(text);
 
-    text = g_strdup_printf("Desarrolladores: %s", stringArrayToString(vjuego->developers, MAX_CANT));
+    temp = stringArrayToString(vjuego->developers, MAX_CANT);
+    text = g_strdup_printf("Desarrolladores: %s", temp);
     gtk_label_set_text(GTK_LABEL(widgets->developers_lbl), text);
+    g_free(temp);
     g_free(text);
 
-    text = g_strdup_printf("Generos: %s", stringArrayToString(vjuego->genres, MAX_CANT));
+    temp = stringArrayToString(vjuego->genres, MAX_CANT);
+    text = g_strdup_printf("Generos: %s", temp);
     gtk_label_set_text(GTK_LABEL(widgets->genres_lbl), text);
+    g_free(temp);
     g_free(text);
 
-    text = g_strdup_printf("Distribuidoras: %s", stringArrayToString(vjuego->publishers, MAX_CANT));
+    temp = stringArrayToString(vjuego->publishers, MAX_CANT);
+    text = g_strdup_printf("Distribuidoras: %s", temp);
     gtk_label_set_text(GTK_LABEL(widgets->publishers_lbl), text);
+    g_free(temp);
     g_free(text);
 
     text = g_strdup_printf("Sitio web: %s", vjuego->website);
@@ -135,6 +146,7 @@ static void mostrarDetalles(GtkListBox *box, GtkListBoxRow *row, gpointer user_d
     
 }
 
+
 static void search_cb(GtkButton *btn, gpointer user_data){
     searchWidgets *widgets = user_data;
     GtkWidget *row;
@@ -145,19 +157,17 @@ static void search_cb(GtkButton *btn, gpointer user_data){
 
     GtkWidget *window = widgets->window;
     GtkWidget *result_list = widgets-> result_list;
-    widgets->results = NULL;
-    widgets->result_count = 0;
 
     //Limpiar lista en cada búsqueda y liberar memoria  
     gtk_list_box_remove_all(GTK_LIST_BOX(result_list)); 
-    if(widgets->results){
-        g_free(widgets->results);
-        widgets->results = NULL;
-    }
+    if(widgets->results) g_free(widgets->results);
+
+    widgets->results = NULL;
+    widgets->result_count = 0;
 
     //Alocar nueva memoria 
-    widgets->results = g_malloc(sizeof(Videojuego) * MAX_RESULTS);
-    if(!(widgets->results)){
+    widgets->results = g_malloc0(sizeof(Videojuego) * MAX_RESULTS);
+    if(widgets->results == NULL){
         perror("Error alocando memoria");
         exit(-1);
     }
@@ -212,11 +222,9 @@ static void search_cb(GtkButton *btn, gpointer user_data){
         return;   
     } 
 
-    recvFull(sockfd, results, count * sizeof(Videojuego));
-
-    /*NOTA. El buffer de la tubería es de solo 65536 bytes,
-    así que debemos recibir los resultados por partes
-    */
+    for(int i = 0; i < count; i++){
+        recvFull(sockfd, &results[i], sizeof(Videojuego));
+    }
 
     //Mostrar resultados encontrados en pantalla
     
@@ -267,7 +275,7 @@ static void activate(GtkApplication *app){
     GtkWidget *website_lbl;
     GtkWidget *description_lbl;
 
-    searchWidgets *s_widgets = g_malloc(sizeof(searchWidgets));
+    searchWidgets *s_widgets = g_malloc0(sizeof(searchWidgets));
 
     window = gtk_application_window_new (app);
     gtk_window_set_title (GTK_WINDOW (window), "Buscador de Videojuegos");
@@ -364,6 +372,7 @@ static void activate(GtkApplication *app){
     
     description_lbl = gtk_label_new("");
     gtk_label_set_wrap(GTK_LABEL(description_lbl), TRUE);
+    gtk_label_set_wrap_mode(GTK_LABEL(description_lbl), PANGO_WRAP_WORD_CHAR);
     s_widgets -> description_lbl = description_lbl;
 
     gtk_box_append(GTK_BOX(details_box), name_lbl);
@@ -425,7 +434,6 @@ static void activate(GtkApplication *app){
     gtk_window_present(GTK_WINDOW (window));
 
 }
-
 
 int main(int argc, char **argv){
     GtkApplication *app;

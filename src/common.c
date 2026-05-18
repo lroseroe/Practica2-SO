@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <errno.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 
 /* Hash djb2 para strings */
 unsigned long hashString(const char *str, unsigned long B){
@@ -232,29 +233,33 @@ Videojuego getRegisterFromCSV(uint32_t position, FILE *file){
     return vjuego;
 }
 
-void sendFull(int fd, void *buf, size_t size){
+ssize_t sendFull(int fd, void *buf, size_t size){
     size_t total = 0;
     ssize_t r;
 
     while(total < size){
         //Si mandamos menos del total, enviamos los bytes 1 a 1 hasta completarlo.
         r = send(fd, ((char*)buf) + total, size - total, 0);
-        if(r < 0){
+        if(r <= 0){
             perror("Error en send");
             exit(-1);
         }
 
         total += r;
     }
+
+    return r;
 }
 
-void recvFull(int fd, void *buf, size_t size){
+ssize_t recvFull(int fd, void *buf, size_t size){
     size_t total = 0;
     ssize_t r;
 
     while(total < size){
         //Si recibimos menos del total leemos los bytes 1 a 1 hasta completarlo.
         r = recv(fd, ((char*)buf) + total, size - total, 0);
+        if(r == 0) return 0;
+        
         if(r < 0){
             perror("Error en recv");
             exit(-1);
@@ -262,4 +267,6 @@ void recvFull(int fd, void *buf, size_t size){
 
         total += r;
     }
+
+    return r;
 }
